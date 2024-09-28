@@ -27,16 +27,17 @@ struct dbfHeader
     Byte4 lastrec;
     Byte2 headlen;
     Byte2 reclen;
-    Byte resereved1[16];
+    Byte reserved1[16];
     Byte tableflags;
     Byte codepage;
     Byte reserved2[2];
 };
 class DBF
 {
-    std::ifstream dbf;
     dbfHeader header;
     dbfField *fields;
+    //
+    std::ifstream dbf;
     char *buffer;
     long curpos;
     long filesize;
@@ -51,6 +52,7 @@ public:
         filesize = -1;
         strcpy(message, "");
     }
+    
     ~DBF()
     {
         close();
@@ -60,6 +62,7 @@ public:
     {
         return message;
     }
+    
     bool open(const char *filename)
     {
         close();
@@ -165,14 +168,17 @@ public:
         }
         return 0;
     }
+    
     char getFieldType(int pos) const
     {
         return fields[pos].type;
     }
+    
     int getFieldLen(int pos) const
     {
         return fields[pos].len;
     }
+    
     int getFieldDec(int pos) const
     {
         return fields[pos].dec;
@@ -189,14 +195,17 @@ public:
         }
         return -1;
     }
+    
     string getFieldBuffer(const char *name) const
     {
         return getFieldBuffer(getFieldPos(name));
     }
+    
     string getFieldValue(const char *name) const
     {
         return getFieldValue(getFieldPos(name));
     }
+    
     string getFieldBuffer(int pos) const
     {
         if (pos >= 0 && pos < getFieldsCount())
@@ -211,7 +220,7 @@ public:
         static char sp[] = " \t\b\r\n";
         string str(getFieldBuffer(pos));
         str.erase(str.find_last_not_of(sp) + 1);
-        if (getFieldType(pos) == 'N')
+        if (getFieldType(pos) == 'N' || getFieldType(pos) == 'F')
         {
             str.erase(0, str.find_first_not_of(sp));
         }
@@ -237,6 +246,7 @@ public:
     {
         return header.reclen;
     }
+    
     int getHeadLen() const
     {
         return header.headlen;
@@ -273,10 +283,12 @@ public:
         curpos = pos;
         return oldpos;
     }
+    
     bool skip()
     {
         return skip(1);
     }
+
     bool skip(int rows)
     {
         go(getPos() + rows);
@@ -337,6 +349,7 @@ void replace_all(string &str, const string &str1, const string &str2)
         str.replace(pos, str1.length(), str2);
     }
 }
+
 string json_str(const string &s)
 {
     string str(s);
@@ -346,10 +359,12 @@ string json_str(const string &s)
     replace_all(str, "\n", "\\n");
     return string("\"") + str + '"';
 }
+
 string json_str(const char *name, const char *value)
 {
     return json_str(name) + ':' + json_str(value);
 }
+
 string json_long(const char *name, long value)
 {
     return json_str(name) + ':' + (to_string(value));
@@ -359,6 +374,7 @@ string json_number(const char *name, const char *value)
 {
     return json_str(name) + ':' + value;
 }
+
 string json_bool(const char *name, bool value)
 {
     return json_str(name) + ':' + (value ? "true" : "false");
@@ -398,6 +414,7 @@ void to_csv(DBF &dbf)
         dbf.skip();
     }
 }
+
 void to_json(DBF &dbf, string &fileName)
 {
     string cf = "";
@@ -453,19 +470,19 @@ void to_json(DBF &dbf, string &fileName)
     cout << "\n]}" << endl;
 }
 
-int main(int argn, char *argv[])
+int main(int argc, char *argv[])
 {
     DBF dbf;
     int i;
     int opt_c = 'c';
     string fileName;
 
-    if (argn < 2)
+    if (argc < 2)
     {
         cerr << "Usage: dbfu dbf" << endl;
         exit(1);
     }
-    for (i = 1; i < argn; i++)
+    for (i = 1; i < argc; i++)
     {
         string opt = argv[i];
         if (opt[0] == '-')

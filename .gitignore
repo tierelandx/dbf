@@ -1,5 +1,7 @@
 dbfu
+dbs
+*.o
 .DS_Store
 dbfu.dSYM/*
 .vscode/*
-
+test.*
