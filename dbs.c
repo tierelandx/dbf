@@ -53,8 +53,9 @@ void USAGE()
     fprintf(stderr, "  -r         output # record\n");
     fprintf(stderr, "  -d         add * field as deleted mark\n");
     fprintf(stderr, "  -D         skip deleted records\n");
+    fprintf(stderr, "  -s         trim spaces from fields\n");
     fprintf(stderr, "  -C <char>  field quota\n");
-    fprintf(stderr, "  -c <char>  field delimiter \n");
+    fprintf(stderr, "  -c <char>  field delimiter\n");
     exit(2);
 }
 
@@ -75,13 +76,14 @@ int main(int argc, char **argv)
     int opt_d = 0;
     int opt_D = 0;
     int opt_H = 0;
+    int opt_s = 0;
 
     if (argc < 2)
     {
         USAGE();
     }
 
-    while ((opt = getopt(argc, argv, "hiIrdDHC:c:")) != -1)
+    while ((opt = getopt(argc, argv, "hiIrdDHC:c:s")) != -1)
     {
         switch (opt)
         {
@@ -113,6 +115,9 @@ int main(int argc, char **argv)
         case 'c':
             FD[0] = *optarg;
             FD[1] = 0;
+            break;
+        case 's':
+            opt_s++;
             break;
         }
     }
@@ -259,19 +264,22 @@ int main(int argc, char **argv)
             {
                 p++;
 
-                if (*p == ' ')
+                if (opt_s)
                 {
-                    sc++;
-                    continue;
-                }
-
-                if (ff[n].type == 'C')
-                {
-                    for (int i = 0; i < sc; i++)
+                    if (*p == ' ')
                     {
-                        fputc(32, stdout);
+                        sc++;
+                        continue;
                     }
-                    sc = 0;
+
+                    if (ff[n].type == 'C')
+                    {
+                        for (int i = 0; i < sc; i++)
+                        {
+                            fputc(32, stdout);
+                        }
+                        sc = 0;
+                    }
                 }
 
                 if (*p == *FC)
@@ -286,7 +294,7 @@ int main(int argc, char **argv)
         }
         fprintf(stdout, "\n");
     }
-//    fprintf(stdout,"%ld record(s)\n",record);
+    //    fprintf(stdout,"%ld record(s)\n",record);
 
     FREE(buf);
     FREE(ff);
