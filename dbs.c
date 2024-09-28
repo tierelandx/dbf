@@ -40,7 +40,23 @@ typedef struct
         ptr = 0;   \
     }
 
-char *FD = ";";
+char FD[2] = "|"; // field delimiter
+char FC[2] = "";  // field quota char
+
+void USAGE()
+{
+    fprintf(stderr, "DBf Streamer, 2024, All rights reserved\n");
+    fprintf(stderr, "dbs options file\n");
+    fprintf(stderr, "  -h         help \n");
+    fprintf(stderr, "  -i         output file info\n");
+    fprintf(stderr, "  -I         output file info end exit\n");
+    fprintf(stderr, "  -r         output # record\n");
+    fprintf(stderr, "  -d         add * field as deleted mark\n");
+    fprintf(stderr, "  -D         skip deleted records\n");
+    fprintf(stderr, "  -C <char>  field quota\n");
+    fprintf(stderr, "  -c <char>  field delimiter \n");
+    exit(2);
+}
 
 int main(int argc, char **argv)
 {
@@ -60,20 +76,17 @@ int main(int argc, char **argv)
     int opt_D = 0;
     int opt_H = 0;
 
-    while ((opt = getopt(argc, argv, "hiIrdDH")) != -1)
+    if (argc < 2)
+    {
+        USAGE();
+    }
+
+    while ((opt = getopt(argc, argv, "hiIrdDHC:c:")) != -1)
     {
         switch (opt)
         {
         case 'h':
-            fprintf(stderr, "DBf Streamer, 2024\n");
-            fprintf(stderr, "dbs options file\n");
-            fprintf(stderr, "  - h help \n");
-            fprintf(stderr, "  - i out info\n");
-            fprintf(stderr, "  - I out info end exit\n");
-            fprintf(stderr, "  - r out # record\n");
-            fprintf(stderr, "  - d add * field as deleted mark\n");
-            fprintf(stderr, "  - D skip deleted records\n");
-            exit(2);
+            USAGE();
             break;
         case 'i':
             opt_i++;
@@ -92,6 +105,14 @@ int main(int argc, char **argv)
             break;
         case 'H':
             opt_H++;
+            break;
+        case 'C':
+            FC[0] = *optarg;
+            FC[1] = 0;
+            break;
+        case 'c':
+            FD[0] = *optarg;
+            FD[1] = 0;
             break;
         }
     }
@@ -122,19 +143,6 @@ int main(int argc, char **argv)
         fprintf(stderr, "Error read header (%ld)\n", size);
         exit(1);
     }
-    // Check date values
-    if (hd.mm > 12 || hd.mm < 1)
-    {
-        fclose(dbf);
-        fprintf(stderr, "Error month field (%d)\n", hd.mm);
-        exit(1);
-    }
-    if (hd.dd > 31 || hd.dd < 1)
-    {
-        fclose(dbf);
-        fprintf(stderr, "Error day field (%d)\n", hd.mm);
-        exit(1);
-    }
 
     hd.fcount = hd.headlen / 32 - 1;
 
@@ -148,12 +156,26 @@ int main(int argc, char **argv)
         fprintf(stdout, "Charset: %d (0x%02X)\n", hd.codepage, (int)hd.codepage);
         fprintf(stdout, "Fcount: %d \n", hd.fcount);
         fprintf(stdout, "Filesize: %ld \n", file_size);
-        fprintf(stdout, "Calcsize: %ld \n", (long) hd.headlen+hd.reclen*hd.lastrec);
+        fprintf(stdout, "Calcsize: %ld \n", (long)hd.headlen + hd.reclen * hd.lastrec);
         if (opt_I)
         {
             fclose(dbf);
             exit(0);
         }
+    }
+
+    // Check date values
+    if (hd.mm > 12 || hd.mm < 1)
+    {
+        fclose(dbf);
+        fprintf(stderr, "Error month field (%d)\n", hd.mm);
+        exit(1);
+    }
+    if (hd.dd > 31 || hd.dd < 1)
+    {
+        fclose(dbf);
+        fprintf(stderr, "Error day field (%d)\n", hd.mm);
+        exit(1);
     }
 
     ff = malloc(hd.fcount * 32);
@@ -178,6 +200,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "Error buffer memory allocate\n");
         exit(1);
     }
+    buf[hd.reclen] = 0;
 
     if (opt_H)
     {
@@ -188,7 +211,7 @@ int main(int argc, char **argv)
             memcpy(field_name, ff[f].name, 11);
             field_name[11] = 0;
             fputs(fd, stdout);
-            fprintf(stdout, "\"%s,%c,%d,%d\"", field_name, ff[f].type, ff[f].len, ff[f].dec);
+            fprintf(stdout, "%s%s,%c,%d,%d%s", FC, field_name, ff[f].type, ff[f].len, ff[f].dec, FC);
             fd = FD;
         }
         fputc('\n', stdout);
@@ -205,10 +228,10 @@ int main(int argc, char **argv)
     // read DBF file data
     while (fread(buf, 1, hd.reclen, dbf) == hd.reclen)
     {
+        record++;
+
         char *p = buf;
 
-        record++;
-        buf[hd.reclen] = 0;
         fd = "";
 
         if (*buf == '*' && opt_D)
@@ -218,7 +241,7 @@ int main(int argc, char **argv)
 
         if (opt_d)
         {
-            fprintf(stdout, "\"%c\"", *buf);
+            fprintf(stdout, "%s%c%s", FC, *buf, FC);
             fd = FD;
         }
 
@@ -231,7 +254,7 @@ int main(int argc, char **argv)
         for (int n = 0; n < hd.fcount; n++)
         {
             int sc = 0; // space counter
-            fprintf(stdout, "%s\"", fd);
+            fprintf(stdout, "%s%s", fd, FC);
             for (int m = 0; m < ff[n].len; m++)
             {
                 p++;
@@ -251,18 +274,19 @@ int main(int argc, char **argv)
                     sc = 0;
                 }
 
-                if (*p == '"')
+                if (*p == *FC)
                 {
                     fputc(*p, stdout);
                 }
 
                 fputc(*p, stdout);
             }
-            fprintf(stdout, "\"");
+            fprintf(stdout, "%s", FC);
             fd = FD;
         }
         fprintf(stdout, "\n");
     }
+//    fprintf(stdout,"%ld record(s)\n",record);
 
     FREE(buf);
     FREE(ff);
