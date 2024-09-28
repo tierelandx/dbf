@@ -43,10 +43,17 @@ typedef struct
 char FD[2] = "|"; // field delimiter
 char FC[2] = "";  // field quota char
 
+#ifndef VERSION
+#define VERSION "0.0.1"
+#endif
+
 void USAGE()
 {
-    fprintf(stderr, "DBf Streamer, 2024, All rights reserved\n");
-    fprintf(stderr, "dbs options file\n");
+    fprintf(stderr, "DBf Streamer, 2024, Version: %s\n", VERSION);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "usage: dbs [<options>] <file>\n");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "options:\n");
     fprintf(stderr, "  -h         help \n");
     fprintf(stderr, "  -i         output file info\n");
     fprintf(stderr, "  -I         output file info end exit\n");
@@ -54,8 +61,8 @@ void USAGE()
     fprintf(stderr, "  -d         add * field as deleted mark\n");
     fprintf(stderr, "  -D         skip deleted records\n");
     fprintf(stderr, "  -s         trim spaces from fields\n");
-    fprintf(stderr, "  -C <char>  field quota\n");
-    fprintf(stderr, "  -c <char>  field delimiter\n");
+    fprintf(stderr, "  -C <char>  field quota char\n");
+    fprintf(stderr, "  -c <char>  field delimiter char\n");
     exit(2);
 }
 
@@ -186,6 +193,7 @@ int main(int argc, char **argv)
     ff = malloc(hd.fcount * 32);
     if (ff == NULL)
     {
+        fclose(dbf);
         fprintf(stderr, "Error fields memory allocate\n");
         exit(1);
     }
@@ -202,6 +210,7 @@ int main(int argc, char **argv)
     buf = malloc(hd.reclen + 1);
     if (buf == NULL)
     {
+        fclose(dbf);
         fprintf(stderr, "Error buffer memory allocate\n");
         exit(1);
     }
@@ -224,6 +233,7 @@ int main(int argc, char **argv)
 
     if (fseek(dbf, hd.headlen, SEEK_SET))
     {
+        fclose(dbf);
         fprintf(stderr, "Error fseek\n");
         exit(1);
     }
@@ -246,13 +256,13 @@ int main(int argc, char **argv)
 
         if (opt_d)
         {
-            fprintf(stdout, "%s%c%s", FC, *buf, FC);
+            fprintf(stdout, "%s%s%c%s", fd, FC, *buf, FC);
             fd = FD;
         }
 
         if (opt_r)
         {
-            fprintf(stdout, "%ld", record);
+            fprintf(stdout, "%s%ld", fd, record);
             fd = FD;
         }
 
