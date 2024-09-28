@@ -50,6 +50,7 @@ int main(int argc, char **argv)
     char *buf;
     char *fd = "";
     size_t size;
+    long file_size = 0;
     int opt;
     //
     int opt_i = 0;
@@ -102,6 +103,17 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    fseek(dbf, 0, SEEK_END);
+    file_size = ftell(dbf);
+    fseek(dbf, 0, SEEK_SET);
+
+    if (file_size < 65)
+    {
+        fclose(dbf);
+        fprintf(stderr, "Error file size (%ld)\n", file_size);
+        exit(1);
+    }
+
     size = fread(&hd, 1, 32, dbf);
 
     if (size != 32)
@@ -135,6 +147,8 @@ int main(int argc, char **argv)
         fprintf(stdout, "Reclen: %d\n", hd.reclen);
         fprintf(stdout, "Charset: %d (0x%02X)\n", hd.codepage, (int)hd.codepage);
         fprintf(stdout, "Fcount: %d \n", hd.fcount);
+        fprintf(stdout, "Filesize: %ld \n", file_size);
+        fprintf(stdout, "Calcsize: %ld \n", (long) hd.headlen+hd.reclen*hd.lastrec);
         if (opt_I)
         {
             fclose(dbf);
@@ -143,6 +157,12 @@ int main(int argc, char **argv)
     }
 
     ff = malloc(hd.fcount * 32);
+    if (ff == NULL)
+    {
+        fprintf(stderr, "Error fields memory allocate\n");
+        exit(1);
+    }
+
     size = fread(ff, 1, hd.fcount * 32, dbf);
     if (size != hd.fcount * 32)
     {
@@ -153,6 +173,11 @@ int main(int argc, char **argv)
     }
 
     buf = malloc(hd.reclen + 1);
+    if (buf == NULL)
+    {
+        fprintf(stderr, "Error buffer memory allocate\n");
+        exit(1);
+    }
 
     if (opt_H)
     {
@@ -169,7 +194,11 @@ int main(int argc, char **argv)
         fputc('\n', stdout);
     }
 
-    fseek(dbf, hd.headlen, SEEK_SET);
+    if (fseek(dbf, hd.headlen, SEEK_SET))
+    {
+        fprintf(stderr, "Error fseek\n");
+        exit(1);
+    }
 
     long record = 0;
 
