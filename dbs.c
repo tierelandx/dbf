@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 
 typedef unsigned char Byte;
 typedef unsigned int Byte4;
@@ -19,7 +21,9 @@ typedef struct
 typedef struct
 {
     Byte version;
-    Byte yymmdd[3];
+    Byte yy;
+    Byte mm;
+    Byte dd;
     Byte4 lastrec;
     Byte2 headlen;
     Byte2 reclen;
@@ -35,6 +39,7 @@ typedef struct
         free(ptr); \
         ptr = 0;   \
     }
+
 char *FD = ";";
 
 int main(int argc, char **argv)
@@ -42,10 +47,55 @@ int main(int argc, char **argv)
     dbfHeader hd;
     dbfField *ff;
     FILE *dbf;
-    size_t size;
     char *buf;
+    char *fd = "";
+    size_t size;
+    int opt;
+    //
+    int opt_i = 0;
+    int opt_I = 0;
+    int opt_r = 0;
+    int opt_d = 0;
+    int opt_D = 0;
+    int opt_H = 0;
 
-    dbf = fopen(argv[1], "rb");
+    while ((opt = getopt(argc, argv, "hiIrdDH")) != -1)
+    {
+        switch (opt)
+        {
+        case 'h':
+            fprintf(stderr, "DBf Streamer, 2024\n");
+            fprintf(stderr, "dbs options file\n");
+            fprintf(stderr, "  - h help \n");
+            fprintf(stderr, "  - i out info\n");
+            fprintf(stderr, "  - I out info end exit\n");
+            fprintf(stderr, "  - r out # record\n");
+            fprintf(stderr, "  - d add * field as deleted mark\n");
+            fprintf(stderr, "  - D skip deleted records\n");
+            exit(2);
+            break;
+        case 'i':
+            opt_i++;
+            break;
+        case 'I':
+            opt_I++;
+            break;
+        case 'r':
+            opt_r++;
+            break;
+        case 'd':
+            opt_d++;
+            break;
+        case 'D':
+            opt_D++;
+            break;
+        case 'H':
+            opt_H++;
+            break;
+        }
+    }
+
+    dbf = fopen(argv[optind], "rb");
     if (dbf == NULL)
     {
         fprintf(stderr, "Error open file (%s)\n", argv[1]);
@@ -60,7 +110,37 @@ int main(int argc, char **argv)
         fprintf(stderr, "Error read header (%ld)\n", size);
         exit(1);
     }
+    // Check date values
+    if (hd.mm > 12 || hd.mm < 1)
+    {
+        fclose(dbf);
+        fprintf(stderr, "Error month field (%d)\n", hd.mm);
+        exit(1);
+    }
+    if (hd.dd > 31 || hd.dd < 1)
+    {
+        fclose(dbf);
+        fprintf(stderr, "Error day field (%d)\n", hd.mm);
+        exit(1);
+    }
+
     hd.fcount = hd.headlen / 32 - 1;
+
+    if (opt_i || opt_I)
+    {
+        fprintf(stdout, "Version: %d (0x%02X)\n", (int)hd.version, (int)hd.version);
+        fprintf(stdout, "Date: %d.%02d.%02d\n", (int)hd.yy + 1900, (int)hd.mm, (int)hd.dd);
+        fprintf(stdout, "Lastrec: %ld\n", (long)hd.lastrec);
+        fprintf(stdout, "Headlen: %d\n", hd.headlen);
+        fprintf(stdout, "Reclen: %d\n", hd.reclen);
+        fprintf(stdout, "Charset: %d (0x%02X)\n", hd.codepage, (int)hd.codepage);
+        fprintf(stdout, "Fcount: %d \n", hd.fcount);
+        if (opt_I)
+        {
+            fclose(dbf);
+            exit(0);
+        }
+    }
 
     ff = malloc(hd.fcount * 32);
     size = fread(ff, 1, hd.fcount * 32, dbf);
@@ -71,23 +151,29 @@ int main(int argc, char **argv)
         fprintf(stderr, "Error read fields (%ld)\n", size);
         exit(1);
     }
+
     buf = malloc(hd.reclen + 1);
 
-    // Header info
-    char *fd = "";
-    for (int f = 0; f < hd.fcount; f++)
+    if (opt_H)
     {
-        fputs(fd, stdout);
-        fprintf(stdout, "\"%s,%c,%d,%d\"", ff[f].name, ff[f].type, ff[f].len, ff[f].dec);
-        fd = FD;
+        // Header info
+        for (int f = 0; f < hd.fcount; f++)
+        {
+            char field_name[12];
+            memcpy(field_name, ff[f].name, 11);
+            field_name[11] = 0;
+            fputs(fd, stdout);
+            fprintf(stdout, "\"%s,%c,%d,%d\"", field_name, ff[f].type, ff[f].len, ff[f].dec);
+            fd = FD;
+        }
+        fputc('\n', stdout);
     }
-    fputc(10, stdout);
 
     fseek(dbf, hd.headlen, SEEK_SET);
 
     long record = 0;
 
-    // file data
+    // read DBF file data
     while (fread(buf, 1, hd.reclen, dbf) == hd.reclen)
     {
         char *p = buf;
@@ -96,8 +182,22 @@ int main(int argc, char **argv)
         buf[hd.reclen] = 0;
         fd = "";
 
-        fprintf(stdout, "%ld", record);
-        fd = FD;
+        if (*buf == '*' && opt_D)
+        {
+            continue;
+        }
+
+        if (opt_d)
+        {
+            fprintf(stdout, "\"%c\"", *buf);
+            fd = FD;
+        }
+
+        if (opt_r)
+        {
+            fprintf(stdout, "%ld", record);
+            fd = FD;
+        }
 
         for (int n = 0; n < hd.fcount; n++)
         {
@@ -138,5 +238,6 @@ int main(int argc, char **argv)
     FREE(buf);
     FREE(ff);
     fclose(dbf);
+
     return 0;
 }
