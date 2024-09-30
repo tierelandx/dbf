@@ -3,6 +3,10 @@
 #include <unistd.h>
 #include <string.h>
 
+#ifndef VERSION
+#define VERSION "0.0.2"
+#endif
+
 typedef unsigned char Byte;
 typedef unsigned int Byte4;
 typedef unsigned short Byte2;
@@ -40,12 +44,17 @@ typedef struct
         ptr = 0;   \
     }
 
-char FD[2] = "|"; // field delimiter
-char FC[2] = "";  // field quota char
+#define FCLOSE(fd)  \
+    if (fd)         \
+    {               \
+        fclose(fd); \
+        fd = 0;     \
+    }
 
-#ifndef VERSION
-#define VERSION "0.0.1"
-#endif
+#define IS_LEAP(y) (((y) % 400 == 0 || (y) % 4 == 0 && (y) % 100 != 0) ? 1 : 0)
+
+char FD[2] = "|"; // field delim char
+char FC[2] = "";  // field quota char
 
 void USAGE()
 {
@@ -63,15 +72,17 @@ void USAGE()
     fprintf(stderr, "  -s         trim spaces from fields\n");
     fprintf(stderr, "  -C <char>  field quota char\n");
     fprintf(stderr, "  -c <char>  field delimiter char\n");
+    // fprintf(stderr, "  -n         count records only\n");
     exit(2);
 }
+
 
 int main(int argc, char **argv)
 {
     dbfHeader hd;
-    dbfField *ff;
-    FILE *dbf;
-    char *buf;
+    dbfField *ff = 0;
+    FILE *dbf = 0;
+    char *buf = 0;
     char *fd = "";
     size_t size;
     long file_size = 0;
@@ -84,6 +95,18 @@ int main(int argc, char **argv)
     int opt_D = 0;
     int opt_H = 0;
     int opt_s = 0;
+
+    if (sizeof(dbfHeader) != 32)
+    {
+        fprintf(stderr, "Error header size\n");
+        exit(1);
+    }
+
+    if (sizeof(dbfField) != 32)
+    {
+        fprintf(stderr, "Error field size\n");
+        exit(1);
+    }
 
     if (argc < 2)
     {
@@ -136,13 +159,14 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    // file size
     fseek(dbf, 0, SEEK_END);
     file_size = ftell(dbf);
     fseek(dbf, 0, SEEK_SET);
 
     if (file_size < 65)
     {
-        fclose(dbf);
+        FCLOSE(dbf);
         fprintf(stderr, "Error file size (%ld)\n", file_size);
         exit(1);
     }
@@ -151,7 +175,7 @@ int main(int argc, char **argv)
 
     if (size != 32)
     {
-        fclose(dbf);
+        FCLOSE(dbf);
         fprintf(stderr, "Error read header (%ld)\n", size);
         exit(1);
     }
@@ -160,32 +184,32 @@ int main(int argc, char **argv)
 
     if (opt_i || opt_I)
     {
-        fprintf(stdout, "Version: %d (0x%02X)\n", (int)hd.version, (int)hd.version);
-        fprintf(stdout, "Date: %d.%02d.%02d\n", (int)hd.yy + 1900, (int)hd.mm, (int)hd.dd);
-        fprintf(stdout, "Lastrec: %ld\n", (long)hd.lastrec);
-        fprintf(stdout, "Headlen: %d\n", hd.headlen);
-        fprintf(stdout, "Reclen: %d\n", hd.reclen);
-        fprintf(stdout, "Charset: %d (0x%02X)\n", hd.codepage, (int)hd.codepage);
-        fprintf(stdout, "Fcount: %d \n", hd.fcount);
+        fprintf(stdout, "Version:  %d (0x%02X)\n", (int)hd.version, (int)hd.version);
+        fprintf(stdout, "Date:     %d.%02d.%02d\n", (int)hd.yy + 1900, (int)hd.mm, (int)hd.dd);
+        fprintf(stdout, "Lastrec:  %ld\n", (long)hd.lastrec);
+        fprintf(stdout, "Headlen:  %d\n", hd.headlen);
+        fprintf(stdout, "Reclen:   %d\n", hd.reclen);
+        fprintf(stdout, "Charset:  %d (0x%02X)\n", hd.codepage, (int)hd.codepage);
+        fprintf(stdout, "Fcount:   %d \n", hd.fcount);
         fprintf(stdout, "Filesize: %ld \n", file_size);
         fprintf(stdout, "Calcsize: %ld \n", (long)hd.headlen + hd.reclen * hd.lastrec);
         if (opt_I)
         {
-            fclose(dbf);
+            FCLOSE(dbf);
             exit(0);
         }
     }
 
-    // Check date values
+    // Simple date check
     if (hd.mm > 12 || hd.mm < 1)
     {
-        fclose(dbf);
+        FCLOSE(dbf);
         fprintf(stderr, "Error month field (%d)\n", hd.mm);
         exit(1);
     }
-    if (hd.dd > 31 || hd.dd < 1)
+    if (hd.dd > 31 || hd.dd < 1 || hd.mm == 2 && hd.dd > 29)
     {
-        fclose(dbf);
+        FCLOSE(dbf);
         fprintf(stderr, "Error day field (%d)\n", hd.mm);
         exit(1);
     }
@@ -193,7 +217,7 @@ int main(int argc, char **argv)
     ff = malloc(hd.fcount * 32);
     if (ff == NULL)
     {
-        fclose(dbf);
+        FCLOSE(dbf);
         fprintf(stderr, "Error fields memory allocate\n");
         exit(1);
     }
@@ -202,7 +226,7 @@ int main(int argc, char **argv)
     if (size != hd.fcount * 32)
     {
         FREE(ff);
-        fclose(dbf);
+        FCLOSE(dbf);
         fprintf(stderr, "Error read fields (%ld)\n", size);
         exit(1);
     }
@@ -210,9 +234,10 @@ int main(int argc, char **argv)
     buf = malloc(hd.reclen + 1);
     if (buf == NULL)
     {
-        fclose(dbf);
-        fprintf(stderr, "Error buffer memory allocate\n");
-        exit(1);
+        FREE(ff);
+        FCLOSE(dbf);
+        fprintf(stderr, "Error buffer memory\n");
+        exit(EXIT_FAILURE);
     }
     buf[hd.reclen] = 0;
 
@@ -233,8 +258,10 @@ int main(int argc, char **argv)
 
     if (fseek(dbf, hd.headlen, SEEK_SET))
     {
-        fclose(dbf);
-        fprintf(stderr, "Error fseek\n");
+        FREE(buf);
+        FREE(ff);
+        FCLOSE(dbf);
+        fprintf(stderr, "Error fseek (%d)\n", hd.headlen);
         exit(1);
     }
 
@@ -276,12 +303,13 @@ int main(int argc, char **argv)
 
                 if (opt_s)
                 {
+                    // Skip space
                     if (*p == ' ')
                     {
                         sc++;
                         continue;
                     }
-
+                    // Restore inner spaces
                     if (ff[n].type == 'C')
                     {
                         for (int i = 0; i < sc; i++)
@@ -308,7 +336,7 @@ int main(int argc, char **argv)
 
     FREE(buf);
     FREE(ff);
-    fclose(dbf);
+    FCLOSE(dbf);
 
-    return 0;
+    return EXIT_SUCCESS;
 }
