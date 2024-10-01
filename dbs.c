@@ -76,7 +76,6 @@ void USAGE()
     exit(2);
 }
 
-
 int main(int argc, char **argv)
 {
     dbfHeader hd;
@@ -86,6 +85,7 @@ int main(int argc, char **argv)
     char *fd = "";
     size_t size;
     long file_size = 0;
+    int reclen2 = 1;
     int opt;
     //
     int opt_i = 0;
@@ -228,6 +228,19 @@ int main(int argc, char **argv)
         FREE(ff);
         FCLOSE(dbf);
         fprintf(stderr, "Error read fields (%ld)\n", size);
+        exit(1);
+    }
+
+    // Sum field length and compare with header 
+    for (int i = 0; i < hd.fcount; i++)
+    {
+        reclen2 += ff[i].len;
+    }
+    if (hd.reclen != reclen2)
+    {
+        FREE(ff);
+        FCLOSE(dbf);
+        fprintf(stdout, "Error record length (%d!=%d)\n",hd.reclen,reclen2);
         exit(1);
     }
 
