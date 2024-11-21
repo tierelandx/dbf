@@ -72,6 +72,7 @@ void USAGE()
     fprintf(stderr, "  -s         trim spaces from fields\n");
     fprintf(stderr, "  -C <char>  field quota char\n");
     fprintf(stderr, "  -c <char>  field delimiter char\n");
+    fprintf(stderr, "  -H         output headers\n");
     // fprintf(stderr, "  -n         count records only\n");
     exit(2);
 }
@@ -231,7 +232,7 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    // Sum field length and compare with header 
+    // Sum field length and compare with header
     for (int i = 0; i < hd.fcount; i++)
     {
         reclen2 += ff[i].len;
@@ -240,7 +241,7 @@ int main(int argc, char **argv)
     {
         FREE(ff);
         FCLOSE(dbf);
-        fprintf(stdout, "Error record length (%d!=%d)\n",hd.reclen,reclen2);
+        fprintf(stdout, "Error record length (%d!=%d)\n", hd.reclen, reclen2);
         exit(1);
     }
 
